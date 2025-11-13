@@ -1,0 +1,29 @@
+# Lightning / IDE / server files
+.cursor-server
+.idea/
+.vscode/
+.vscode-server/
+.windsurf-server/
+.lightning_studio/
+
+# Python compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment files
+.env
+.venv/
+
+
+# model outputs / logs
+*.ckpt
+*.pt
+*.pth
+*.npz
+*.npy
+logs/
+checkpoints/
+outputs/
+lightning_logs/
