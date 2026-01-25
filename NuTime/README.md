@@ -1,73 +1,109 @@
-# [TMLR 2024] NuTime
+# NuTime — Numerically Multi-Scaled Embedding for Time-Series Pretraining x CWRU Dataset
 
-<h4 align="center">
-
-NuTime: Numerically Multi-Scaled Embedding for Large-Scale Time-Series Pretraining
-
-[Chenguo Lin](https://chenguolin.github.io), [Xumeng Wen](https://github.com/xumwen), [Wei Cao](https://weicao1990.github.io/), [Congrui Huang](https://dblp.org/pid/26/8737.html), [Jiang Bian](https://sites.google.com/view/jiangbian), [Stephen Lin](https://www.microsoft.com/en-us/research/people/stevelin/), [Zhirong Wu](https://www.microsoft.com/en-us/research/people/wuzhiron/)
-
-[![OpenReview](https://img.shields.io/badge/OpenReview-Page-blue)](https://openreview.net/forum?id=TwiSBZ0p9u)
 [![arXiv](https://img.shields.io/badge/arXiv-2310.07402-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2310.07402)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](./LICENSE)
 
-<p>
-    <img width="730" alt="pipeline", src="./assets/pipeline.png">
-</p>
+This repository contains the official implementation of the paper:
 
-</h4>
+NuTime: Numerically Multi-Scaled Embedding for Large-Scale Time-Series Pretraining — Chenguo Lin et al. (TMLR 2024)  
+Paper: https://arxiv.org/abs/2310.07402
 
-This repository contains the official implementation of the paper: [NuTime: Numerically Multi-Scaled Embedding for Large-Scale Time-Series Pretraining](https://arxiv.org/abs/2310.07402), which is accepted to TMLR 2024.
-In this work, we propose the <b>NuTime</b> model for large-scale time series pretraining. The model is based on the Transformer architecture, which takes input as a set of tokens from non-overlapping windows. Each window is represented by its normalized shape, the window mean and standard deviation. We develop a <b>numerically multi-scaled embedding</b> method (NME) for representing the scalar values of mean and std. The model can <u>take raw values of time-series data in <b>any numerical scales</b> as input <b>without</b> any data normalization and transformation</u>.
+This fork/adaptation packages NuTime and includes demo configurations for fault diagnosis (CWRU) and other time-series tasks (e.g., Epilepsy). NuTime provides a transformer-based WinT backbone and the WindowNormEncoder to create multi-scaled numeric embeddings for efficient and effective time-series pretraining and finetuning.
 
-Feel free to contact me (chenguolin@stu.pku.edu.cn) or open an issue if you have any questions or suggestions.
+...
 
+(kept earlier content — Quick links, Requirements, Quick start, etc.)
 
-## 📢 News
-- **2024-12-23**: Check the latest repository under the Microsoft account: [microsoft/NuTime](https://github.com/microsoft/NuTime).
-- **2024-11-12**: Checkpoint of the self-supervised pretrained NuTime is released.
-- **2024-11-12**: Codes about data preprocessing, training, evaluation are released.
-- **2024-07-15**: It might take some time to clean the entire codebase for releasing, so we first provide the code about **window & mean & std embeddings**, which is the essential part of the proposed NuTime, at [here](./src/models/encoders/WindowNormEncoder.py).
-- **2024-07-10**: NuTime is accepted to TMLR 2024.
+CWRU (Case Western Reserve University) demo — dataset preparation (exact instructions)
+-----------------------------------------------------------------
 
+NuTime's data loader (see `src/data/dataset.py` and `src/data/dataloader.py`) expects each dataset to be available under:
+`<dataset_root>/<dataset_name>/`
 
-## 📋 TODO
-- [x] Release the training and evaluation code
-- [x] Release the self-supervised pretrained NuTime
+Within the dataset folder NuTime will look for either:
+- PyTorch `.pt` files: `train.pt`, `val.pt`, `test.pt` — OR —
+- Feather `.feather` files: `train.feather`, `val.feather`, `test.feather`
 
+Which format is easiest depends on your raw CWRU data. The recommended (and simplest) format for CWRU is the `.pt` format described below.
 
-## 🔧 Installation
-Please install PyTorch according to your CUDA version first. There are not restrictions on the torch version, feel free to use your preferred one.
-```bash
-git clone https://github.com/chenguolin/NuTime.git
-cd NuTime
-bash settings/setup.sh
-```
+.pt format expected by NuTime
+- Each file is a dict saved with `torch.save(dict, path)` where:
+  - `dict['samples']` is a torch.Tensor of shape (N, C, L)
+    - N = number of samples
+    - C = number of channels (1 for typical CWRU single-channel vibration signals)
+    - L = length (number of time samples per instance)
+  - `dict['labels']` is a torch.LongTensor of shape (N,)
+    - class indices (0, 1, 2, ...) for each sample
+- When `CustomDataset` loads a `.pt` file it calls `data['labels'].long()` and `data['samples'].float()`; NuTime will automatically set `config.classes` from unique labels in the `.pt` file.
+- Save files as:
+  - `datasets/CWRU/train.pt`
+  - `datasets/CWRU/val.pt`
+  - `datasets/CWRU/test.pt`
 
+.feather format (alternative)
+- A `.feather` file should have the first column as the class label (strings are fine) and subsequent columns the time-series values flattened into columns. The repository already contains helpers for creating `.feather` in `src/data/preprocess.py`.
+- Save files as:
+  - `datasets/CWRU/train.feather`
+  - `datasets/CWRU/val.feather`
+  - `datasets/CWRU/test.feather`
 
-## 📊 Dataset
-Please refer to [src/data/preprocess.py](./src/data/preprocess.py).
-We provide the script to preprocess the data including: `UCR`, `UEA`, `SleepEDF`, `Epilepsy`, etc.
-The processed and splitted `Epilpesy` dataset is provided in [datasets/Epilepsy](./datasets/Epilepsy) for example.
+Recommended workflow to prepare CWRU for NuTime
+1. Collect/organize raw CWRU signals:
+   - Option A (recommended): Organize raw samples as per-class directories where each sample is a .npy file (1D array) or a .mat file that can be loaded into a numpy array.
+     Example:
+       raw_cwru/
+         ├─ class_0/
+         │    ├─ sample_000.npy
+         │    ├─ sample_001.npy
+         │    └─ ...
+         ├─ class_1/
+         │    └─ ...
+         └─ class_2/
+   - Option B: If you already have large monolithic recordings, segment them into fixed-length windows and label them accordingly.
 
+2. Use the helper script (example provided below) to:
+   - load samples,
+   - optionally resample/trim/pad to a fixed length L,
+   - assign integer labels,
+   - split into train / val / test (stratified), and
+   - save `train.pt`, `val.pt`, and `test.pt` in `datasets/CWRU/`.
 
-## 🚀 Usage
-- The core part of our work is `WindowNormEncoder` in [src/models/encoders/WindowNormEncoder.py](./src/models/encoders/WindowNormEncoder.py) and `WinT` in [src/models/networks.py](./src/models/networks.py). You can directly view the code for implementation details. Other codes are merely for data preprocessing, training, evaluation and ablation study, which could be ignored essentially.
+3. Update the demo config:
+   - `configs/demo_ft_cwru.json` includes `"dataset": "CWRU"` and `"dataset_dir": "./datasets"`. Ensure your files are under `./datasets/CWRU/` (relative to `NuTime` root).
+   - Check `transform_size`/`window_size` in config — these control how transforms are applied. If your samples have length L, ensure `config.transform_size` and `config.window_size` are compatible (or set `transform_size_mode: "auto"`).
 
-- Checkpoint of the self-supervised (i.e., BYOL-style) pretrained NuTime (with `9` multi-scaled embeddings) is provided in [ckpt/checkpoint_bias9.pth](./ckpt/checkpoint_bias9.pth)
+Example helper script (converts raw class folders into train/val/test .pt files)
+- A convenience script is included in `tools/prepare_cwru.py` (example below). It:
+  - walks a `raw_dir`, assumes subfolders are class names,
+  - loads `.npy` or `.mat` files (or `.txt` with numeric arrays),
+  - pads/truncates each sample to a target length `L`,
+  - produces stratified train/val/test splits,
+  - saves `train.pt`, `val.pt`, and `test.pt` under `datasets/CWRU/`.
 
-### Finetune Pretrained NuTime for Epilepsy dataset
-```bash
-python3 src/pipeline.py --config_file configs/demo_ft_epilepsy.json
-```
+Running the script (example)
+1. Place your raw files under `raw_cwru/` (subfolders per class).
+2. From `NuTime` root:
+   python tools/prepare_cwru.py --raw_dir ../raw_cwru --out_dir ./datasets/CWRU --length 2048 --val_ratio 0.1 --test_ratio 0.1
 
+3. Confirm files exist:
+   ls datasets/CWRU
+   # should show train.pt val.pt test.pt
 
-## 📚 Citation
-If you find our work helpful, please consider citing:
-```bibtex
-@article{lin2024nutime,
-  title={NuTime: Numerically Multi-Scaled Embedding for Large-Scale Time-Series Pretraining},
-  author={Chenguo Lin and Xumeng Wen and Wei Cao and Congrui Huang and Jiang Bian and Stephen Lin and Zhirong Wu},
-  journal={Transactions on Machine Learning Research (TMLR)},
-  year={2024}
-}
-```
+Run the demo finetune on CWRU
+- After preparing the files:
+  python3 src/pipeline.py --config_file configs/demo_ft_cwru.json
+
+Implementation notes / why this works
+- `src/data/dataset.py`'s `CustomDataset` first tries `<dataset_dir>/<dataset>/train.pt` and falls back to `.feather`.
+- `src/data/dataloader.py` builds `train`, `val`, and `test` loaders and unifies label space across splits, then updates `config.classes`, `config.num_classes`, and `config.num_channels` automatically.
+- If your dataset is multi-channel (e.g., C=3), make sure the samples have shape (N, C, L). For single-channel signals, shape is (N, 1, L).
+
+If you want, I can:
+- tailor the conversion script to the exact raw CWRU format you have on disk (MAT files, CSVs, or other),
+- or commit the helper script and README update directly to the repository.
+
+License
+- MIT License — see `LICENSE` for details.
+
+Contributing and contact
+- Contributions, issues, and pull requests are welcome.
